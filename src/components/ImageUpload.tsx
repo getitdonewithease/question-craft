@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 interface ImageUploadProps {
   value?: string;
-  onChange: (url: string) => void;
+  onChange: (data: { file: File | null; preview: string }) => void;
   compact?: boolean;
 }
 
@@ -24,7 +24,7 @@ export const ImageUpload = ({ value, onChange, compact = false }: ImageUploadPro
       reader.onloadend = () => {
         const result = reader.result as string;
         setPreview(result);
-        onChange(result);
+        onChange({ file, preview: result });
       };
       reader.readAsDataURL(file);
     }
@@ -32,12 +32,12 @@ export const ImageUpload = ({ value, onChange, compact = false }: ImageUploadPro
 
   const handleUrlChange = (url: string) => {
     setPreview(url);
-    onChange(url);
+    onChange({ file: null, preview: url });
   };
 
   const clearImage = () => {
     setPreview("");
-    onChange("");
+    onChange({ file: null, preview: "" });
   };
 
   if (compact) {

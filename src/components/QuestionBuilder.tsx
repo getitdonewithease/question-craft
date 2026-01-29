@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Eye, Save } from "lucide-react";
+import { Plus, Eye, Save, Loader2 } from "lucide-react";
 import { OptionBuilder } from "./OptionBuilder";
 import { ImageUpload } from "./ImageUpload";
 import { QuestionPreview } from "./QuestionPreview";
@@ -25,6 +25,7 @@ export interface Question {
   topic?: string;
   weight: number;
   imageUrl?: string;
+  imageFile?: File | null;
   solution?: string;
   examType: string;
   subject: string;
@@ -35,12 +36,14 @@ export interface Question {
 export const QuestionBuilder = () => {
   const { toast } = useToast();
   const [showPreview, setShowPreview] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [question, setQuestion] = useState<Question>({
     content: "",
     section: "",
     topic: "",
     weight: 1,
     imageUrl: "",
+    imageFile: null,
     solution: "",
     examType: "",
     subject: "",
@@ -87,7 +90,7 @@ export const QuestionBuilder = () => {
     setQuestion({ ...question, options: relabeled });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     // Validation
     if (!question.content.trim()) {
       toast({
@@ -136,12 +139,104 @@ export const QuestionBuilder = () => {
       return;
     }
 
-    // TODO: Save to database
-    console.log("Submitting question:", question);
-    toast({
-      title: "Success!",
-      description: "Question saved successfully",
-    });
+    const toImageRequest = (preview?: string, file?: File | null) => {
+      if (!preview) return null;
+
+      // Use file metadata when available
+      const fileName = file?.name || "upload";
+      const contentTypeFromFile = file?.type;
+      let contentType = contentTypeFromFile || "";
+      let base64String = "";
+      let extension = fileName.includes(".") ? fileName.split(".").pop() || "" : "";
+
+      if (preview.startsWith("data:")) {
+        const [meta, data] = preview.split(",");
+        if (meta) {
+          const match = meta.match(/data:(.*?);base64/);
+          if (match?.[1]) {
+            contentType = contentType || match[1];
+            const parts = match[1].split("/");
+            if (!extension && parts.length === 2) {
+              extension = parts[1];
+            }
+          }
+        }
+        base64String = data || "";
+      } else {
+        // Not a data URL; send as-is (likely a normal URL) and leave base64 empty
+        return null;
+      }
+
+      return {
+        base64String,
+        fileName,
+        contentType,
+        extension,
+      };
+    };
+
+    // Transform question data to API payload format
+    const payload = {
+      content: question.content,
+      section: question.section?.trim() || null,
+      topic: question.topic?.trim() || null,
+      weight: question.weight,
+      imageRequest: toImageRequest(question.imageUrl?.trim(), question.imageFile),
+      solution: question.solution?.trim() || null,
+      examType: question.examType,
+      subject: question.subject,
+      examYear: question.examYear,
+      optionRequests: question.options.map((opt) => ({
+        label: opt.label,
+        content: opt.content,
+        isCorrect: opt.isCorrect,
+        imageUrl: opt.imageUrl?.trim() || "",
+      })),
+    };
+
+    setIsSaving(true);
+    try {
+      const response = await fetch("https://localhost:53196/api/v1/questions/store", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Server error: ${response.status}`);
+      }
+
+      toast({
+        title: "Success!",
+        description: "Question saved successfully",
+      });
+
+      // Reset form after successful save
+      setQuestion({
+        content: "",
+        section: "",
+        topic: "",
+        weight: 1,
+        imageUrl: "",
+        solution: "",
+        examType: "",
+        subject: "",
+        examYear: "",
+        options: [],
+      });
+    } catch (error) {
+      console.error("Error saving question:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to save question. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -175,7 +270,9 @@ export const QuestionBuilder = () => {
               <Label className="text-base font-semibold">Question Image (Optional)</Label>
               <ImageUpload
                 value={question.imageUrl}
-                onChange={(url) => setQuestion({ ...question, imageUrl: url })}
+                onChange={({ file, preview }) =>
+                  setQuestion({ ...question, imageUrl: preview, imageFile: file })
+                }
               />
             </div>
 
@@ -339,9 +436,18 @@ export const QuestionBuilder = () => {
                 <Eye className="h-4 w-4" />
                 Preview Question
               </Button>
-              <Button onClick={handleSubmit} className="flex-1 gap-2">
-                <Save className="h-4 w-4" />
-                Save Question
+              <Button onClick={handleSubmit} className="flex-1 gap-2" disabled={isSaving}>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Save Question
+                  </>
+                )}
               </Button>
             </div>
           </div>
