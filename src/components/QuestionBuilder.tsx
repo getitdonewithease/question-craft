@@ -10,7 +10,6 @@ import { OptionBuilder } from "./OptionBuilder";
 import { ImageUpload } from "./ImageUpload";
 import { QuestionPreview } from "./QuestionPreview";
 import { useToast } from "@/hooks/use-toast";
-import { getAccessToken } from "@/lib/utils";
 
 export interface Option {
   id: string;
@@ -197,25 +196,10 @@ export const QuestionBuilder = () => {
 
     setIsSaving(true);
     try {
-      // Get access token for authentication
-      const accessToken = getAccessToken();
-      if (!accessToken) {
-        const errorMsg = 
-          "Access token not found. To set your token, open the browser console and run:\n\n" +
-          "localStorage.setItem('authData', JSON.stringify({\n" +
-          "  accessToken: 'YOUR_TOKEN_HERE',\n" +
-          "  expirationTime: '2026-03-01T06:02:50.6074824+00:00'\n" +
-          "}));\n\n" +
-          "Or use: window.setAccessToken('YOUR_TOKEN_HERE', 'EXPIRATION_DATE')\n" +
-          "Or set VITE_ACCESS_TOKEN in your .env file.";
-        throw new Error(errorMsg);
-      }
-
       const response = await fetch("https://localhost:53196/api/v1/questions/store", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken}`,
         },
         body: JSON.stringify(payload),
       });

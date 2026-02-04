@@ -11,6 +11,8 @@ export interface ExtractedQuestion {
   }>;
   explanation: string | null;
   topic: string | null;
+  requiresImage: boolean;
+  imageUrl?: string;
 }
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
@@ -74,59 +76,35 @@ export async function extractQuestionsFromImages(
 
   const prompt = `
   You are an expert academic digitization engine.
-
   I have provided images from a JAMB Past Question paper.
-
   
-
   **INPUT CONTEXT:**
-
   - **Image 1:** Contains the Questions (usually in a 2-column layout).
-
   - **Image 2 (Optional):** May contain the "Answer Key" (e.g., "1. A, 2. B").
-
   
-
   **CRITICAL RULES:**
-
   1. **Layout:** Read the LEFT column first (top to bottom), THEN the RIGHT column. Do not read across columns.
-
   2. **Watermarks:** Ignore all website URLs (e.g., myschoolgist.com, schoolngr) and headers.
-
-  3. **Math:** Output all equations in valid LaTeX format (e.g., $\\frac{a}{b}$).
-
+  3. **Math:** Output all equations in valid LaTeX format (e.g., $\frac{a}{b}$).
   4. **Grouping:** If questions share a common instruction (e.g., "Passage I" or "Questions 1-5"), include that instruction/passage in the 'content' field for EVERY question it applies to.
-
   5. **Answers:** If an Answer Key is visible in the images, map the correct option to the question (set 'isCorrect: true').
-
-
+  6. **Image Detection:** If a question text refers to a visual element (e.g., "Use the diagram below", "Figure 1", "The graph shows"), you MUST set the "requiresImage" field to TRUE. Otherwise FALSE.
 
   **OUTPUT FORMAT:**
-
   Return a STRICT JSON Array (no markdown blocks).
-
   [
-
     {
-
-      "content": "Question text here... [IMAGE REQUIRED if diagram is needed]",
-
+      "content": "Question text here...",
+      "requiresImage": true, 
       "options": [
-
         { "label": "A", "content": "Option text", "isCorrect": false },
-
         { "label": "B", "content": "Option text", "isCorrect": true }
-
       ],
-
       "explanation": "Extract solution explanation if available, else null.",
-
-      "topic": "Subject topic (e.g. Organic Chemistry)"
-
+      "topic": "Subject topic"
     }
-
   ]
-  `;
+`;
 
   try {
     // Convert all images to base64
@@ -216,6 +194,8 @@ export async function extractQuestionsFromImages(
       })),
       explanation: q.explanation || null,
       topic: q.topic || null,
+      requiresImage: q.requiresImage || false,
+      imageUrl: q.imageUrl || undefined,
     }));
   } catch (error) {
     console.error("Error extracting questions from images:", error);

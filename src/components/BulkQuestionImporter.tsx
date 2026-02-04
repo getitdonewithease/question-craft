@@ -1,12 +1,23 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { Upload, X, Loader2, FileImage, AlertCircle } from "lucide-react";
+import { Upload, X, Loader2, FileImage, AlertCircle, Crop } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import ReactCrop, { type Crop as CropType, type PixelCrop } from "react-image-crop";
+import "react-image-crop/dist/ReactCrop.css";
 import { extractQuestionsFromImages, ExtractedQuestion } from "@/lib/gemini";
 import { QuestionReviewGrid } from "./QuestionReviewGrid";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +38,93 @@ export const BulkQuestionImporter = ({ onImportComplete }: BulkQuestionImporterP
   const [examType, setExamType] = useState("");
   const [subject, setSubject] = useState("");
   const [examYear, setExamYear] = useState("");
+  
+  // Image cropping state
+  const [crop, setCrop] = useState<CropType>();
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
+  const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number | null>(null);
+  const [imageRef, setImageRef] = useState<HTMLImageElement | null>(null);
+  const [isCropDialogOpen, setIsCropDialogOpen] = useState(false);
+  const [selectedSourceImageIndex, setSelectedSourceImageIndex] = useState(0);
+
+  const sourceImageUrl = useMemo(() => {
+    const file = questionImages[selectedSourceImageIndex];
+    if (!file) return null;
+    return URL.createObjectURL(file);
+  }, [questionImages, selectedSourceImageIndex]);
+
+  useEffect(() => {
+    return () => {
+      if (sourceImageUrl) URL.revokeObjectURL(sourceImageUrl);
+    };
+  }, [sourceImageUrl]);
+
+  const remainingDiagramCount = useMemo(
+    () => extractedQuestions.filter((q) => q.requiresImage && !q.imageUrl).length,
+    [extractedQuestions]
+  );
+
+  const openCropDialog = (questionIndex: number) => {
+    setSelectedQuestionIndex(questionIndex);
+    setCompletedCrop(null);
+    setCrop(undefined);
+    setImageRef(null);
+    setSelectedSourceImageIndex(0);
+    setIsCropDialogOpen(true);
+  };
+
+  const saveCrop = () => {
+    if (selectedQuestionIndex === null) return;
+    if (!imageRef || !completedCrop || completedCrop.width <= 0 || completedCrop.height <= 0) {
+      toast({
+        title: "Crop Required",
+        description: "Please select a crop area before saving.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const scaleX = imageRef.naturalWidth / imageRef.width;
+    const scaleY = imageRef.naturalHeight / imageRef.height;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.floor(completedCrop.width * scaleX);
+    canvas.height = Math.floor(completedCrop.height * scaleY);
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) {
+      toast({
+        title: "Crop Error",
+        description: "Failed to create canvas context.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    ctx.drawImage(
+      imageRef,
+      Math.floor(completedCrop.x * scaleX),
+      Math.floor(completedCrop.y * scaleY),
+      Math.floor(completedCrop.width * scaleX),
+      Math.floor(completedCrop.height * scaleY),
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    const dataUrl = canvas.toDataURL("image/png");
+
+    setExtractedQuestions((prev) =>
+      prev.map((q, idx) =>
+        idx === selectedQuestionIndex
+          ? { ...q, imageUrl: dataUrl, requiresImage: false }
+          : q
+      )
+    );
+
+    setIsCropDialogOpen(false);
+  };
 
   const handleQuestionImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -89,7 +187,7 @@ export const BulkQuestionImporter = ({ onImportComplete }: BulkQuestionImporterP
       }
 
       setExtractedQuestions(questions);
-      setShowReview(true);
+      // Stay on this screen to allow optional cropping for diagram questions.
 
       toast({
         title: "Extraction Complete",
@@ -369,9 +467,159 @@ export const BulkQuestionImporter = ({ onImportComplete }: BulkQuestionImporterP
                 </Button>
               )}
             </div>
+
+            {/* Extracted Questions (Hybrid Image Extraction / Manual Cropping) */}
+            {extractedQuestions.length > 0 && !showReview && (
+              <div className="pt-6 space-y-4 border-t border-border">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="space-y-1">
+                    <h2 className="text-lg font-semibold">Extracted Questions</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {extractedQuestions.length} question(s) extracted.
+                      {remainingDiagramCount > 0
+                        ? ` ${remainingDiagramCount} need diagram crops.`
+                        : " No diagram crops needed."}
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => setShowReview(true)}
+                    className="gap-2"
+                    disabled={isProcessing || extractedQuestions.length === 0}
+                  >
+                    <Upload className="h-4 w-4" />
+                    Continue to Review & Save
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  {extractedQuestions.map((q, index) => (
+                    <Card key={index} className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary">Question {index + 1}</Badge>
+                            {q.requiresImage && !q.imageUrl && (
+                              <Badge variant="destructive" className="gap-1">
+                                ⚠️ Diagram Needed
+                              </Badge>
+                            )}
+                            {q.imageUrl && (
+                              <Badge variant="outline" className="gap-1">
+                                Cropped Image Added
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-foreground line-clamp-2">
+                            {q.content}
+                          </p>
+                        </div>
+
+                        {q.requiresImage && !q.imageUrl && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => openCropDialog(index)}
+                            disabled={questionImages.length === 0}
+                          >
+                            <Crop className="h-4 w-4" />
+                            Crop Image
+                          </Button>
+                        )}
+                      </div>
+
+                      {q.imageUrl && (
+                        <div className="space-y-2">
+                          <Label className="text-sm font-semibold">Cropped Diagram Preview</Label>
+                          <img
+                            src={q.imageUrl}
+                            alt={`Cropped diagram for question ${index + 1}`}
+                            className="max-h-48 rounded-md border border-border object-contain bg-muted"
+                          />
+                        </div>
+                      )}
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </Card>
       </div>
+
+      {/* Crop Dialog */}
+      <Dialog open={isCropDialogOpen} onOpenChange={setIsCropDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Crop Diagram from Uploaded Page</DialogTitle>
+            <DialogDescription>
+              Select the area that contains the diagram for the chosen question, then click “Save Crop”.
+            </DialogDescription>
+          </DialogHeader>
+
+          {questionImages.length > 1 && (
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Source Page</Label>
+              <Select
+                value={String(selectedSourceImageIndex)}
+                onValueChange={(v) => setSelectedSourceImageIndex(Number(v))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a source image" />
+                </SelectTrigger>
+                <SelectContent>
+                  {questionImages.map((f, idx) => (
+                    <SelectItem key={idx} value={String(idx)}>
+                      {f.name || `Image ${idx + 1}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="max-h-[60vh] overflow-auto rounded-md border border-border bg-muted p-2">
+            {sourceImageUrl ? (
+              <ReactCrop
+                crop={crop}
+                onChange={(_, percentCrop) => setCrop(percentCrop)}
+                onComplete={(c) => setCompletedCrop(c)}
+              >
+                <img
+                  src={sourceImageUrl}
+                  alt="Source for cropping"
+                  onLoad={(e) => {
+                    const img = e.currentTarget;
+                    setImageRef(img);
+                    setCrop({
+                      unit: "%",
+                      x: 10,
+                      y: 10,
+                      width: 80,
+                      height: 80,
+                    });
+                  }}
+                  className="max-w-full h-auto"
+                />
+              </ReactCrop>
+            ) : (
+              <div className="p-6 text-sm text-muted-foreground">
+                No source image available.
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setIsCropDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveCrop} className="gap-2">
+              <Crop className="h-4 w-4" />
+              Save Crop
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

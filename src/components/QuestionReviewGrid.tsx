@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Save, Trash2, CheckCircle2, Loader2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ExtractedQuestion } from "@/lib/gemini";
-import { cn, getAccessToken } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 interface EditableQuestion extends ExtractedQuestion {
   id: string;
@@ -136,13 +136,13 @@ export const QuestionReviewGrid = ({
 
   const toImageRequest = (preview?: string) => {
     if (!preview || !preview.startsWith("data:")) return null;
-    const [meta, data] = preview.split(",");
-    const match = meta.match(/data:(.*?);base64/);
+    const match = preview.match(/^data:(.*?);base64,/);
     const contentType = match?.[1] || "image/png";
     const extension = contentType.split("/")[1] || "png";
 
+    // Important: backend expects the full data URL in base64String
     return {
-      base64String: data || "",
+      base64String: preview,
       fileName: `question-image.${extension}`,
       contentType,
       extension,
@@ -191,12 +191,7 @@ export const QuestionReviewGrid = ({
           subTopic: null,
           source: null,
           weight: q.weight,
-          imageRequest: {
-            base64String: "",
-            fileName: "",
-            contentType: "",
-            extension: "",
-          },
+          imageRequest: toImageRequest(q.imageUrl) || null,
           solution: q.explanation?.trim() || null,
           examType: q.examType,
           subject: q.subject,
@@ -210,26 +205,11 @@ export const QuestionReviewGrid = ({
         })),
       };
 
-      // Get access token for authentication
-      const accessToken = getAccessToken();
-      if (!accessToken) {
-        const errorMsg = 
-          "Access token not found. To set your token, open the browser console and run:\n\n" +
-          "localStorage.setItem('authData', JSON.stringify({\n" +
-          "  accessToken: 'YOUR_TOKEN_HERE',\n" +
-          "  expirationTime: '2026-03-01T06:02:50.6074824+00:00'\n" +
-          "}));\n\n" +
-          "Or use: window.setAccessToken('YOUR_TOKEN_HERE', 'EXPIRATION_DATE')\n" +
-          "Or set VITE_ACCESS_TOKEN in your .env file.";
-        throw new Error(errorMsg);
-      }
-
       // Make bulk API call
       const response = await fetch("https://localhost:7009/api/v1/questions/store/bulk", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken}`,
         },
         body: JSON.stringify(bulkPayload),
       });
