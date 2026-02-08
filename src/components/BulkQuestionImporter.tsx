@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Upload, X, Loader2, FileImage, AlertCircle, Crop } from "lucide-react";
@@ -38,6 +39,7 @@ export const BulkQuestionImporter = ({ onImportComplete }: BulkQuestionImporterP
   const [examType, setExamType] = useState("");
   const [subject, setSubject] = useState("");
   const [examYear, setExamYear] = useState("");
+  const [jsonInput, setJsonInput] = useState("");
   
   // Image cropping state
   const [crop, setCrop] = useState<CropType>();
@@ -217,6 +219,114 @@ export const BulkQuestionImporter = ({ onImportComplete }: BulkQuestionImporterP
     setExamType("");
     setSubject("");
     setExamYear("");
+    setJsonInput("");
+  };
+
+  const handleJsonImport = () => {
+    if (!examType || !subject || !examYear) {
+      toast({
+        title: "Validation Error",
+        description: "Exam type, subject, and year are required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!jsonInput.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Please paste JSON before importing",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(jsonInput) as {
+        questions?: Array<{
+          number?: number;
+          topic?: string;
+          text?: string;
+          solution?: string;
+          options?:
+            | Array<{
+                label?: string;
+                value?: string;
+                isCorrect?: boolean;
+              }>
+            | Record<string, string>;
+        }>;
+      };
+
+      const items = payload.questions ?? [];
+      if (items.length === 0) {
+        toast({
+          title: "Validation Error",
+          description: "No questions found in the JSON payload",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const mapped: ExtractedQuestion[] = items.map((item, index) => {
+        const optionsValue = item.options ?? [];
+        const optionsArray = Array.isArray(optionsValue)
+          ? optionsValue
+              .filter((opt) => opt && (opt.value ?? opt.label) != null)
+              .map((opt, optIndex) => ({
+                label: (opt.label || String.fromCharCode(65 + optIndex)).trim(),
+                content: String(opt.value ?? "").trim(),
+                isCorrect: Boolean(opt.isCorrect),
+              }))
+          : Object.entries(optionsValue)
+              .filter(([, value]) => value != null)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([label, content]) => ({
+                label,
+                content: String(content).trim(),
+                isCorrect: false,
+              }));
+
+        return {
+          number: item.number,
+          content: item.text?.trim() || `Question ${item.number ?? index + 1}`,
+          options: optionsArray,
+          explanation: item.solution?.trim() || null,
+          topic: item.topic?.trim() || null,
+          subtopic: null,
+          requiresImage: false,
+          imageUrl: undefined,
+        };
+      });
+
+      const hasInvalid = mapped.some(
+        (q) => !q.content.trim() || q.options.length < 2
+      );
+      if (hasInvalid) {
+        toast({
+          title: "Validation Error",
+          description: "Each question needs text and at least 2 options",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setExtractedQuestions(mapped);
+      setShowReview(true);
+      toast({
+        title: "Import Complete",
+        description: `Loaded ${mapped.length} question(s) from JSON`,
+      });
+    } catch (error) {
+      toast({
+        title: "Invalid JSON",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Unable to parse JSON. Please check the format.",
+        variant: "destructive",
+      });
+    }
   };
 
   if (showReview && extractedQuestions.length > 0) {
@@ -374,6 +484,28 @@ export const BulkQuestionImporter = ({ onImportComplete }: BulkQuestionImporterP
                   />
                 </Label>
               </div>
+            </div>
+
+            {/* JSON Import */}
+            <div className="space-y-3">
+              <Label className="text-base font-semibold">
+                Paste Questions JSON (Optional)
+              </Label>
+              <Textarea
+                placeholder='Paste JSON like { "questions": [ { "number": 1, "text": "...", "options": [ ... ] } ] }'
+                value={jsonInput}
+                onChange={(e) => setJsonInput(e.target.value)}
+                className="min-h-[140px] resize-y"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleJsonImport}
+                disabled={!jsonInput.trim()}
+                className="gap-2"
+              >
+                Load from JSON
+              </Button>
             </div>
 
             {/* Answer Key Image Upload (Optional) */}

@@ -7,18 +7,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Save, Trash2, CheckCircle2, Loader2, X } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import { ExtractedQuestion } from "@/lib/gemini";
 import { cn } from "@/lib/utils";
-
-interface EditableQuestion extends ExtractedQuestion {
-  id: string;
-  examType: string;
-  subject: string;
-  examYear: string;
-  section?: string;
-  weight: number;
-}
+import { useBulkSaveQuestions } from "@/hooks/use-bulk-save-questions";
+import type { EditableOption, EditableQuestion } from "@/hooks/use-bulk-save-questions";
+import { useTopics } from "@/hooks/use-topics";
+import { TopicSelect } from "@/components/TopicSelect";
+import { questionService } from "@/lib/questionService";
+import { useToast } from "@/hooks/use-toast";
+import { ImageUpload } from "@/components/ImageUpload";
 
 interface QuestionReviewGridProps {
   questions: ExtractedQuestion[];
@@ -46,11 +43,145 @@ export const QuestionReviewGrid = ({
       subject,
       examYear,
       section: "",
+      source: "",
       weight: 1,
+      imageFile: null,
     }))
   );
-  const [isSaving, setIsSaving] = useState(false);
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
+  const [savingQuestionIds, setSavingQuestionIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const { isSaving, saveBulkQuestions } = useBulkSaveQuestions({
+    questions,
+    onSuccess: onSaveComplete,
+  });
+  const { topics, isLoading: isTopicsLoading } = useTopics();
+
+  const getDisplayNumber = (q: EditableQuestion, index: number) =>
+    q.number ?? index + 1;
+
+  const dataUrlToFile = (dataUrl?: string) => {
+    if (!dataUrl || !dataUrl.startsWith("data:")) return null;
+    const match = dataUrl.match(/^data:(.*?);base64,(.*)$/);
+    if (!match) return null;
+    const contentType = match[1] || "image/png";
+    const base64Data = match[2];
+    const byteString = atob(base64Data);
+    const byteNumbers = new Array(byteString.length);
+    for (let i = 0; i < byteString.length; i += 1) {
+      byteNumbers[i] = byteString.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const extension = contentType.split("/")[1] || "png";
+    return new File([byteArray], `question-image.${extension}`, {
+      type: contentType,
+    });
+  };
+
+  const validateQuestion = (q: EditableQuestion, index: number) => {
+    const displayNumber = getDisplayNumber(q, index);
+    if (!q.content.trim()) {
+      return `Question ${displayNumber}: Content is required`;
+    }
+    if (q.options.length < 2) {
+      return `Question ${displayNumber}: At least 2 options are required`;
+    }
+    const hasCorrect = q.options.some((opt) => opt.isCorrect);
+    if (!hasCorrect) {
+      return `Question ${displayNumber}: Please mark one option as correct`;
+    }
+    const allOptionsHaveContent = q.options.every((opt) => opt.content.trim());
+    if (!allOptionsHaveContent) {
+      return `Question ${displayNumber}: All options must have content`;
+    }
+    return null;
+  };
+
+  const buildSingleFormData = (q: EditableQuestion) => {
+    const formData = new FormData();
+    if (q.number != null) {
+      formData.append("questionNumber", String(q.number));
+    }
+    formData.append("content", q.content);
+    formData.append("section", q.section?.trim() || "");
+    formData.append("topic", q.topic?.trim() || "");
+    formData.append("subTopic", q.subtopic?.trim() || "");
+    formData.append("source", q.source?.trim() || "");
+    formData.append("weight", String(q.weight));
+    formData.append("solution", q.explanation?.trim() || "");
+    formData.append("examType", q.examType);
+    formData.append("subject", q.subject);
+    formData.append("examYear", q.examYear);
+
+    const questionImageFile = q.imageFile || dataUrlToFile(q.imageUrl);
+    if (questionImageFile) {
+      formData.append("file", questionImageFile);
+    }
+
+    q.options.forEach((opt, optIndex) => {
+      formData.append(`optionRequests[${optIndex}].label`, opt.label);
+      formData.append(`optionRequests[${optIndex}].content`, opt.content);
+      formData.append(
+        `optionRequests[${optIndex}].isCorrect`,
+        String(opt.isCorrect)
+      );
+      if (opt.imageFile) {
+        formData.append(`optionRequests[${optIndex}].file`, opt.imageFile);
+      }
+    });
+
+    return formData;
+  };
+
+  const saveSingleQuestion = async (questionId: string) => {
+    const questionIndex = questions.findIndex((q) => q.id === questionId);
+    if (questionIndex === -1) return;
+    const question = questions[questionIndex];
+    const displayNumber = getDisplayNumber(question, questionIndex);
+
+    const error = validateQuestion(question, questionIndex);
+    if (error) {
+      toast({
+        title: "Validation Error",
+        description: error,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSavingQuestionIds((prev) => {
+      const next = new Set(prev);
+      next.add(questionId);
+      return next;
+    });
+
+    try {
+      const formData = buildSingleFormData(question);
+      await questionService.store(formData);
+
+      toast({
+        title: "Success!",
+        description: `Question ${displayNumber} saved successfully`,
+      });
+    } catch (error) {
+      console.error("Error saving question:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to save question. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingQuestionIds((prev) => {
+        const next = new Set(prev);
+        next.delete(questionId);
+        return next;
+      });
+    }
+  };
 
   const updateQuestion = (id: string, updates: Partial<EditableQuestion>) => {
     setQuestions((prev) =>
@@ -61,7 +192,7 @@ export const QuestionReviewGrid = ({
   const updateOption = (
     questionId: string,
     optionIndex: number,
-    updates: Partial<EditableQuestion["options"][0]>
+    updates: Partial<EditableOption>
   ) => {
     setQuestions((prev) =>
       prev.map((q) => {
@@ -134,112 +265,6 @@ export const QuestionReviewGrid = ({
     setQuestions((prev) => prev.filter((q) => q.id !== id));
   };
 
-  const toImageRequest = (preview?: string) => {
-    if (!preview || !preview.startsWith("data:")) return null;
-    const match = preview.match(/^data:(.*?);base64,/);
-    const contentType = match?.[1] || "image/png";
-    const extension = contentType.split("/")[1] || "png";
-
-    // Important: backend expects the full data URL in base64String
-    return {
-      base64String: preview,
-      fileName: `question-image.${extension}`,
-      contentType,
-      extension,
-    };
-  };
-
-  const handleBulkSave = async () => {
-    // Validation
-    const errors: string[] = [];
-
-    questions.forEach((q, index) => {
-      if (!q.content.trim()) {
-        errors.push(`Question ${index + 1}: Content is required`);
-      }
-      if (q.options.length < 2) {
-        errors.push(`Question ${index + 1}: At least 2 options are required`);
-      }
-      const hasCorrect = q.options.some((opt) => opt.isCorrect);
-      if (!hasCorrect) {
-        errors.push(`Question ${index + 1}: Please mark one option as correct`);
-      }
-      const allOptionsHaveContent = q.options.every((opt) => opt.content.trim());
-      if (!allOptionsHaveContent) {
-        errors.push(`Question ${index + 1}: All options must have content`);
-      }
-    });
-
-    if (errors.length > 0) {
-      toast({
-        title: "Validation Errors",
-        description: errors.slice(0, 3).join(", ") + (errors.length > 3 ? "..." : ""),
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsSaving(true);
-
-    try {
-      // Prepare bulk payload matching the expected API structure
-      const bulkPayload = {
-        questions: questions.map((q) => ({
-          content: q.content,
-          section: q.section?.trim() || null,
-          topic: q.topic?.trim() || null,
-          subTopic: null,
-          source: null,
-          weight: q.weight,
-          imageRequest: toImageRequest(q.imageUrl) || null,
-          solution: q.explanation?.trim() || null,
-          examType: q.examType,
-          subject: q.subject,
-          examYear: q.examYear,
-          optionRequests: q.options.map((opt) => ({
-            label: opt.label,
-            content: opt.content,
-            isCorrect: opt.isCorrect,
-            imageUrl: "",
-          })),
-        })),
-      };
-
-      // Make bulk API call
-      const response = await fetch("https://localhost:7009/api/v1/questions/store/bulk", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(bulkPayload),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Server error: ${response.status} ${response.statusText}`);
-      }
-
-      toast({
-        title: "Success!",
-        description: `Successfully saved ${questions.length} question(s)`,
-      });
-
-      onSaveComplete();
-    } catch (error) {
-      console.error("Error saving questions:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to save questions. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -259,7 +284,7 @@ export const QuestionReviewGrid = ({
               Back
             </Button>
             <Button
-              onClick={handleBulkSave}
+              onClick={saveBulkQuestions}
               disabled={isSaving || questions.length === 0}
               className="gap-2"
             >
@@ -292,7 +317,9 @@ export const QuestionReviewGrid = ({
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 space-y-2">
                   <div className="flex items-center gap-2">
-                    <Badge variant="secondary">Question {index + 1}</Badge>
+                    <Badge variant="secondary">
+                      Question {getDisplayNumber(question, index)}
+                    </Badge>
                     {question.options.some((opt) => opt.isCorrect) && (
                       <Badge variant="outline" className="gap-1">
                         <CheckCircle2 className="h-3 w-3" />
@@ -307,16 +334,44 @@ export const QuestionReviewGrid = ({
                     {question.topic && (
                       <Badge variant="outline">{question.topic}</Badge>
                     )}
+                    {question.subtopic && (
+                      <Badge variant="outline">{question.subtopic}</Badge>
+                    )}
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeQuestion(question.id)}
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => saveSingleQuestion(question.id)}
+                    disabled={
+                      isSaving ||
+                      savingQuestionIds.has(question.id) ||
+                      questions.length === 0
+                    }
+                    className="gap-2"
+                  >
+                    {savingQuestionIds.has(question.id) ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" />
+                        Save
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeQuestion(question.id)}
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
 
               {/* Question Content */}
@@ -329,6 +384,21 @@ export const QuestionReviewGrid = ({
                   }
                   className="min-h-[100px] resize-none"
                   placeholder="Question text..."
+                />
+              </div>
+
+              {/* Question Image */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Question Image (Optional)</Label>
+                <ImageUpload
+                  value={question.imageUrl}
+                  onChange={({ file, preview }) =>
+                    updateQuestion(question.id, {
+                      imageUrl: preview,
+                      imageFile: file,
+                    })
+                  }
+                  compact
                 />
               </div>
 
@@ -355,6 +425,42 @@ export const QuestionReviewGrid = ({
                         weight: parseInt(e.target.value) || 1,
                       })
                     }
+                  />
+                </div>
+              </div>
+
+              {/* Topic, Subtopic & Source */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">Topic (Optional)</Label>
+                  <TopicSelect
+                    value={question.topic || ""}
+                    topics={topics}
+                    disabled={isTopicsLoading}
+                    placeholder={isTopicsLoading ? "Loading topics..." : "Select topic"}
+                    onChange={(value) =>
+                      updateQuestion(question.id, { topic: value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">Subtopic (Optional)</Label>
+                  <Input
+                    value={question.subtopic || ""}
+                    onChange={(e) =>
+                      updateQuestion(question.id, { subtopic: e.target.value })
+                    }
+                    placeholder="e.g., Factoring"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">Source (Optional)</Label>
+                  <Input
+                    value={question.source || ""}
+                    onChange={(e) =>
+                      updateQuestion(question.id, { source: e.target.value })
+                    }
+                    placeholder="e.g., Cambridge or Teacher's Note"
                   />
                 </div>
               </div>

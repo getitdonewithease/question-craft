@@ -3,6 +3,7 @@
  */
 
 export interface ExtractedQuestion {
+  number?: number;
   content: string;
   options: Array<{
     label: string;
@@ -11,6 +12,7 @@ export interface ExtractedQuestion {
   }>;
   explanation: string | null;
   topic: string | null;
+  subtopic?: string | null;
   requiresImage: boolean;
   imageUrl?: string;
 }
@@ -100,8 +102,9 @@ export async function extractQuestionsFromImages(
         { "label": "A", "content": "Option text", "isCorrect": false },
         { "label": "B", "content": "Option text", "isCorrect": true }
       ],
-      "explanation": "Extract solution explanation if available, else null.",
-      "topic": "Subject topic"
+      "explanation": "Generate a simple explanation for the correct answer here, or null if not applicable.",
+      "topic": "Question topic: This should be short usually not more than 3 words.",
+      "subtopic": "Question subtopic - more specific than topic, or null if not applicable"
     }
   ]
 `;
@@ -194,6 +197,7 @@ export async function extractQuestionsFromImages(
       })),
       explanation: q.explanation || null,
       topic: q.topic || null,
+      subtopic: q.subtopic || null,
       requiresImage: q.requiresImage || false,
       imageUrl: q.imageUrl || undefined,
     }));

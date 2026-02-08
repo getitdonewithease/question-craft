@@ -63,7 +63,9 @@ export const OptionBuilder = ({
             {/* Option Image */}
             <ImageUpload
               value={option.imageUrl}
-              onChange={(url) => onUpdate(option.id, { imageUrl: url })}
+              onChange={({ file, preview }) =>
+                onUpdate(option.id, { imageUrl: preview, imageFile: file })
+              }
               compact
             />
           </div>

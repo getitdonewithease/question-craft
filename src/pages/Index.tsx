@@ -13,26 +13,16 @@ const Index = () => {
             <div className="flex gap-2">
               <NavLink
                 to="/"
-                className={({ isActive }) =>
-                  `inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors px-4 py-2 ${
-                    isActive
-                      ? "bg-secondary text-secondary-foreground"
-                      : "hover:bg-accent hover:text-accent-foreground"
-                  }`
-                }
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors px-4 py-2 hover:bg-accent hover:text-accent-foreground"
+                activeClassName="bg-secondary text-secondary-foreground"
               >
                 <FileText className="h-4 w-4" />
                 Single Question
               </NavLink>
               <NavLink
                 to="/bulk-import"
-                className={({ isActive }) =>
-                  `inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors px-4 py-2 ${
-                    isActive
-                      ? "bg-secondary text-secondary-foreground"
-                      : "hover:bg-accent hover:text-accent-foreground"
-                  }`
-                }
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors px-4 py-2 hover:bg-accent hover:text-accent-foreground"
+                activeClassName="bg-secondary text-secondary-foreground"
               >
                 <Upload className="h-4 w-4" />
                 Bulk Import

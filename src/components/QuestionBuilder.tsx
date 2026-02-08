@@ -10,6 +10,9 @@ import { OptionBuilder } from "./OptionBuilder";
 import { ImageUpload } from "./ImageUpload";
 import { QuestionPreview } from "./QuestionPreview";
 import { useToast } from "@/hooks/use-toast";
+import { questionService } from "@/lib/questionService";
+import { useTopics } from "@/hooks/use-topics";
+import { TopicSelect } from "@/components/TopicSelect";
 
 export interface Option {
   id: string;
@@ -17,12 +20,15 @@ export interface Option {
   content: string;
   isCorrect: boolean;
   imageUrl?: string;
+  imageFile?: File | null;
 }
 
 export interface Question {
   content: string;
   section?: string;
   topic?: string;
+  subtopic?: string;
+  source?: string;
   weight: number;
   imageUrl?: string;
   imageFile?: File | null;
@@ -35,12 +41,15 @@ export interface Question {
 
 export const QuestionBuilder = () => {
   const { toast } = useToast();
+  const { topics, isLoading: isTopicsLoading } = useTopics();
   const [showPreview, setShowPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [question, setQuestion] = useState<Question>({
     content: "",
     section: "",
     topic: "",
+    subtopic: "",
+    source: "",
     weight: 1,
     imageUrl: "",
     imageFile: null,
@@ -139,75 +148,37 @@ export const QuestionBuilder = () => {
       return;
     }
 
-    const toImageRequest = (preview?: string, file?: File | null) => {
-      if (!preview) return null;
+    // Transform question data to API form payload format
+    const formData = new FormData();
+    formData.append("content", question.content);
+    formData.append("section", question.section?.trim() || "");
+    formData.append("topic", question.topic?.trim() || "");
+    formData.append("subTopic", question.subtopic?.trim() || "");
+    formData.append("source", question.source?.trim() || "");
+    formData.append("weight", String(question.weight));
+    formData.append("solution", question.solution?.trim() || "");
+    formData.append("examType", question.examType);
+    formData.append("subject", question.subject);
+    formData.append("examYear", question.examYear);
+    if (question.imageFile) {
+      formData.append("file", question.imageFile);
+    }
 
-      // Use file metadata when available
-      const fileName = file?.name || "upload";
-      const contentTypeFromFile = file?.type;
-      let contentType = contentTypeFromFile || "";
-      let base64String = "";
-      let extension = fileName.includes(".") ? fileName.split(".").pop() || "" : "";
-
-      if (preview.startsWith("data:")) {
-        const [meta, data] = preview.split(",");
-        if (meta) {
-          const match = meta.match(/data:(.*?);base64/);
-          if (match?.[1]) {
-            contentType = contentType || match[1];
-            const parts = match[1].split("/");
-            if (!extension && parts.length === 2) {
-              extension = parts[1];
-            }
-          }
-        }
-        base64String = data || "";
-      } else {
-        // Not a data URL; send as-is (likely a normal URL) and leave base64 empty
-        return null;
+    question.options.forEach((opt, index) => {
+      formData.append(`optionRequests[${index}].label`, opt.label);
+      formData.append(`optionRequests[${index}].content`, opt.content);
+      formData.append(`optionRequests[${index}].isCorrect`, String(opt.isCorrect));
+      if (opt.imageFile) {
+        formData.append(`optionRequests[${index}].file`, opt.imageFile);
       }
+    });
 
-      return {
-        base64String,
-        fileName,
-        contentType,
-        extension,
-      };
-    };
-
-    // Transform question data to API payload format
-    const payload = {
-      content: question.content,
-      section: question.section?.trim() || null,
-      topic: question.topic?.trim() || null,
-      weight: question.weight,
-      imageRequest: toImageRequest(question.imageUrl?.trim(), question.imageFile),
-      solution: question.solution?.trim() || null,
-      examType: question.examType,
-      subject: question.subject,
-      examYear: question.examYear,
-      optionRequests: question.options.map((opt) => ({
-        label: opt.label,
-        content: opt.content,
-        isCorrect: opt.isCorrect,
-        imageUrl: opt.imageUrl?.trim() || "",
-      })),
-    };
+    console.log(Array.from(formData.entries()));
+    console.log(formData.entries());
 
     setIsSaving(true);
     try {
-      const response = await fetch("https://localhost:53196/api/v1/questions/store", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Server error: ${response.status}`);
-      }
+      await questionService.store(formData);
 
       toast({
         title: "Success!",
@@ -219,8 +190,11 @@ export const QuestionBuilder = () => {
         content: "",
         section: "",
         topic: "",
+        subtopic: "",
+        source: "",
         weight: 1,
         imageUrl: "",
+        imageFile: null,
         solution: "",
         examType: "",
         subject: "",
@@ -352,11 +326,12 @@ export const QuestionBuilder = () => {
                 <Label htmlFor="topic" className="text-base font-semibold">
                   Topic (Optional)
                 </Label>
-                <Input
-                  id="topic"
-                  placeholder="e.g., Quadratic Equations"
-                  value={question.topic}
-                  onChange={(e) => setQuestion({ ...question, topic: e.target.value })}
+                <TopicSelect
+                  value={question.topic || ""}
+                  topics={topics}
+                  disabled={isTopicsLoading}
+                  placeholder={isTopicsLoading ? "Loading topics..." : "Select topic"}
+                  onChange={(value) => setQuestion({ ...question, topic: value })}
                 />
               </div>
 
@@ -372,6 +347,33 @@ export const QuestionBuilder = () => {
                   onChange={(e) =>
                     setQuestion({ ...question, weight: parseInt(e.target.value) || 1 })
                   }
+                />
+              </div>
+            </div>
+
+            {/* Row 3: Subtopic, Source */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="subtopic" className="text-base font-semibold">
+                  Subtopic (Optional)
+                </Label>
+                <Input
+                  id="subtopic"
+                  placeholder="e.g., Factoring"
+                  value={question.subtopic}
+                  onChange={(e) => setQuestion({ ...question, subtopic: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="source" className="text-base font-semibold">
+                  Source (Optional)
+                </Label>
+                <Input
+                  id="source"
+                  placeholder="e.g., Cambridge or Teacher's Note"
+                  value={question.source}
+                  onChange={(e) => setQuestion({ ...question, source: e.target.value })}
                 />
               </div>
             </div>

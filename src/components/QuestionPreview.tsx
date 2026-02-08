@@ -39,6 +39,16 @@ export const QuestionPreview = ({ question, onClose }: QuestionPreviewProps) => 
                     {question.topic}
                   </Badge>
                 )}
+                {question.subtopic && (
+                  <Badge variant="outline" className="font-medium">
+                    {question.subtopic}
+                  </Badge>
+                )}
+                {question.source && (
+                  <Badge variant="outline" className="font-medium">
+                    {question.source}
+                  </Badge>
+                )}
               </div>
             </div>
             <Button variant="ghost" size="icon" onClick={onClose}>
