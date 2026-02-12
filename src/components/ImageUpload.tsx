@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ interface ImageUploadProps {
 
 export const ImageUpload = ({ value, onChange, compact = false }: ImageUploadProps) => {
   const [preview, setPreview] = useState<string>(value || "");
+  const inputId = useId();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -61,13 +62,13 @@ export const ImageUpload = ({ value, onChange, compact = false }: ImageUploadPro
           </div>
         ) : (
           <Label
-            htmlFor={`image-upload-${Math.random()}`}
+            htmlFor={inputId}
             className="flex items-center justify-center gap-2 h-24 border-2 border-dashed border-border rounded-md cursor-pointer hover:border-primary hover:bg-secondary/50 transition-colors"
           >
             <ImageIcon className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm text-muted-foreground">Add image</span>
             <Input
-              id={`image-upload-${Math.random()}`}
+              id={inputId}
               type="file"
               accept="image/*"
               className="hidden"
@@ -99,7 +100,7 @@ export const ImageUpload = ({ value, onChange, compact = false }: ImageUploadPro
         </Card>
       ) : (
         <Label
-          htmlFor="main-image-upload"
+          htmlFor={inputId}
           className="flex flex-col items-center justify-center gap-2 h-48 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary hover:bg-secondary/50 transition-colors"
         >
           <Upload className="h-8 w-8 text-muted-foreground" />
@@ -108,7 +109,7 @@ export const ImageUpload = ({ value, onChange, compact = false }: ImageUploadPro
           </span>
           <span className="text-xs text-muted-foreground">PNG, JPG, GIF up to 10MB</span>
           <Input
-            id="main-image-upload"
+            id={inputId}
             type="file"
             accept="image/*"
             className="hidden"

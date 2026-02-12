@@ -138,11 +138,17 @@ export const QuestionBuilder = () => {
       return;
     }
 
-    const allOptionsHaveContent = question.options.every((opt) => opt.content.trim());
-    if (!allOptionsHaveContent) {
+    const allOptionsAreValid = question.options.every((opt) => {
+      const hasText = opt.content?.trim();
+      const hasImage = opt.imageFile != null;
+
+      return hasText || hasImage;
+    });
+
+    if (!allOptionsAreValid) {
       toast({
         title: "Validation Error",
-        description: "All options must have content",
+        description: "Each option must have either text content or an image.",
         variant: "destructive",
       });
       return;
