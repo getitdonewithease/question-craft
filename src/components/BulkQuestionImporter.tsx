@@ -246,6 +246,7 @@ export const BulkQuestionImporter = ({ onImportComplete }: BulkQuestionImporterP
         questions?: Array<{
           number?: number;
           topic?: string;
+          section?: string;
           text?: string;
           solution?: string;
           options?:
@@ -292,6 +293,7 @@ export const BulkQuestionImporter = ({ onImportComplete }: BulkQuestionImporterP
           content: item.text?.trim() || `Question ${item.number ?? index + 1}`,
           options: optionsArray,
           explanation: item.solution?.trim() || null,
+          section: item.section?.trim() || null,
           topic: item.topic?.trim() || null,
           subtopic: null,
           requiresImage: false,

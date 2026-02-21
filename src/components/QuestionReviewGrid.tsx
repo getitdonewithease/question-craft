@@ -42,7 +42,7 @@ export const QuestionReviewGrid = ({
       examType,
       subject,
       examYear,
-      section: "",
+      section: q.section ?? "",
       source: "",
       weight: 1,
       imageFile: null,
@@ -406,11 +406,12 @@ export const QuestionReviewGrid = ({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label className="text-sm font-semibold">Section (Optional)</Label>
-                  <Input
+                  <Textarea
                     value={question.section || ""}
                     onChange={(e) =>
                       updateQuestion(question.id, { section: e.target.value })
                     }
+                    className="min-h-[80px] resize-none"
                     placeholder="e.g., Algebra"
                   />
                 </div>

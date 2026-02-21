@@ -11,6 +11,7 @@ export interface ExtractedQuestion {
     isCorrect: boolean;
   }>;
   explanation: string | null;
+  section?: string | null;
   topic: string | null;
   subtopic?: string | null;
   requiresImage: boolean;
@@ -196,6 +197,7 @@ export async function extractQuestionsFromImages(
         isCorrect: opt.isCorrect || false,
       })),
       explanation: q.explanation || null,
+      section: q.section || null,
       topic: q.topic || null,
       subtopic: q.subtopic || null,
       requiresImage: q.requiresImage || false,
