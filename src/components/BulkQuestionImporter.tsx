@@ -214,6 +214,13 @@ export const BulkQuestionImporter = ({
                     <SelectItem value="Chemistry">Chemistry</SelectItem>
                     <SelectItem value="Biology">Biology</SelectItem>
                     <SelectItem value="Economics">Economics</SelectItem>
+                    <SelectItem value="Government">Government</SelectItem>
+                    <SelectItem value="Crk">Crk</SelectItem>
+                    <SelectItem value="Commerce">Commerce</SelectItem>
+                    <SelectItem value="Insurance">Insurance</SelectItem>
+                    <SelectItem value="Irk">Irk</SelectItem>
+                    <SelectItem value="Geography">Geography</SelectItem>
+                    
                   </SelectContent>
                 </Select>
               </div>
