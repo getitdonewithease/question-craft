@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { ExtractedQuestion } from "@/lib/gemini";
+import type { ExtractedQuestion } from "@/types/questions";
 import { questionService } from "@/lib/questionService";
 
 type EditableOption = ExtractedQuestion["options"][number] & {
@@ -46,10 +46,6 @@ const validateQuestions = (questions: EditableQuestion[]) => {
     }
     if (q.options.length < 2) {
       errors.push(`Question ${index + 1}: At least 2 options are required`);
-    }
-    const hasCorrect = q.options.some((opt) => opt.isCorrect);
-    if (!hasCorrect) {
-      errors.push(`Question ${index + 1}: Please mark one option as correct`);
     }
     const allOptionsHaveContent = q.options.every((opt) => opt.content.trim());
     if (!allOptionsHaveContent) {

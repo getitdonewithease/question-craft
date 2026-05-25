@@ -128,16 +128,6 @@ export const QuestionBuilder = () => {
       return;
     }
 
-    const hasCorrectAnswer = question.options.some((opt) => opt.isCorrect);
-    if (!hasCorrectAnswer) {
-      toast({
-        title: "Validation Error",
-        description: "Please mark one option as correct",
-        variant: "destructive",
-      });
-      return;
-    }
-
     const allOptionsAreValid = question.options.every((opt) => {
       const hasText = opt.content?.trim();
       const hasImage = opt.imageFile != null;
@@ -164,7 +154,7 @@ export const QuestionBuilder = () => {
     formData.append("weight", String(question.weight));
     formData.append("solution", question.solution?.trim() || "");
     formData.append("examType", question.examType);
-    formData.append("subject", question.subject);
+    formData.append("subject", question.subject.toLowerCase());
     formData.append("examYear", question.examYear);
     if (question.imageFile) {
       formData.append("file", question.imageFile);

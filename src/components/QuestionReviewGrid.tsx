@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Save, Trash2, CheckCircle2, Loader2, X } from "lucide-react";
-import { ExtractedQuestion } from "@/lib/gemini";
+import type { ExtractedQuestion } from "@/types/questions";
 import { cn } from "@/lib/utils";
 import { useBulkSaveQuestions } from "@/hooks/use-bulk-save-questions";
 import type { EditableOption, EditableQuestion } from "@/hooks/use-bulk-save-questions";
@@ -86,10 +86,6 @@ export const QuestionReviewGrid = ({
     }
     if (q.options.length < 2) {
       return `Question ${displayNumber}: At least 2 options are required`;
-    }
-    const hasCorrect = q.options.some((opt) => opt.isCorrect);
-    if (!hasCorrect) {
-      return `Question ${displayNumber}: Please mark one option as correct`;
     }
     const allOptionsHaveContent = q.options.every((opt) => opt.content.trim());
     if (!allOptionsHaveContent) {
