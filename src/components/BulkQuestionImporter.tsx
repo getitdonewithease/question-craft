@@ -191,10 +191,10 @@ export const BulkQuestionImporter = ({
                     <SelectValue placeholder="Select exam type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="UTME">UTME</SelectItem>
-                    <SelectItem value="POST_UTME">POST UTME</SelectItem>
-                    <SelectItem value="WAEC">WAEC</SelectItem>
-                    <SelectItem value="NECO">NECO</SelectItem>
+                    <SelectItem value="utme">UTME</SelectItem>
+                    <SelectItem value="post_utme">POST UTME</SelectItem>
+                    <SelectItem value="waec">WAEC</SelectItem>
+                    <SelectItem value="neco">NECO</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -208,18 +208,18 @@ export const BulkQuestionImporter = ({
                     <SelectValue placeholder="Select subject" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Mathematics">Mathematics</SelectItem>
-                    <SelectItem value="English">English</SelectItem>
-                    <SelectItem value="Physics">Physics</SelectItem>
-                    <SelectItem value="Chemistry">Chemistry</SelectItem>
-                    <SelectItem value="Biology">Biology</SelectItem>
-                    <SelectItem value="Economics">Economics</SelectItem>
-                    <SelectItem value="Government">Government</SelectItem>
-                    <SelectItem value="Crk">Crk</SelectItem>
-                    <SelectItem value="Commerce">Commerce</SelectItem>
-                    <SelectItem value="Insurance">Insurance</SelectItem>
-                    <SelectItem value="Irk">Irk</SelectItem>
-                    <SelectItem value="Geography">Geography</SelectItem>
+                    <SelectItem value="mathematics">Mathematics</SelectItem>
+                    <SelectItem value="english">English</SelectItem>
+                    <SelectItem value="physics">Physics</SelectItem>
+                    <SelectItem value="chemistry">Chemistry</SelectItem>
+                    <SelectItem value="biology">Biology</SelectItem>
+                    <SelectItem value="economics">Economics</SelectItem>
+                    <SelectItem value="government">Government</SelectItem>
+                    <SelectItem value="crk">Crk</SelectItem>
+                    <SelectItem value="commerce">Commerce</SelectItem>
+                    <SelectItem value="insurance">Insurance</SelectItem>
+                    <SelectItem value="irk">Irk</SelectItem>
+                    <SelectItem value="geography">Geography</SelectItem>
                     
                   </SelectContent>
                 </Select>

@@ -1,4 +1,7 @@
-import { useState } from "react";
+﻿import { useState } from "react";
+import DOMPurify from "dompurify";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +9,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Save, Trash2, CheckCircle2, Loader2, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Save,
+  Trash2,
+  CheckCircle2,
+  Loader2,
+  X,
+  Pencil,
+  Eye,
+} from "lucide-react";
 import type { ExtractedQuestion } from "@/types/questions";
 import { cn } from "@/lib/utils";
 import { useBulkSaveQuestions } from "@/hooks/use-bulk-save-questions";
@@ -25,6 +37,82 @@ interface QuestionReviewGridProps {
   onBack: () => void;
   onSaveComplete: () => void;
 }
+
+const latexPattern =
+  /(\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$([^$\n]+?)\$)/g;
+
+const renderLatexInHtml = (value: string) =>
+  value.replace(
+    latexPattern,
+    (match, _full, blockDollar, blockBracket, inlineParen, inlineDollar) => {
+      const expression =
+        blockDollar || blockBracket || inlineParen || inlineDollar;
+      const displayMode = Boolean(blockDollar || blockBracket);
+
+      try {
+        return katex.renderToString(expression.trim(), {
+          displayMode,
+          throwOnError: false,
+          strict: "ignore",
+          trust: false,
+        });
+      } catch {
+        return match;
+      }
+    }
+  );
+
+const renderFormattedHtml = (value: string) => {
+  const sanitized = DOMPurify.sanitize(value, {
+    ALLOWED_TAGS: [
+      "b",
+      "strong",
+      "i",
+      "em",
+      "u",
+      "s",
+      "sup",
+      "sub",
+      "br",
+      "p",
+      "span",
+      "ul",
+      "ol",
+      "li",
+      "table",
+      "thead",
+      "tbody",
+      "tr",
+      "th",
+      "td",
+    ],
+    ALLOWED_ATTR: [],
+  });
+
+  return renderLatexInHtml(sanitized);
+};
+
+const FormattedText = ({
+  value,
+  className,
+}: {
+  value?: string;
+  className?: string;
+}) => {
+  if (!value?.trim()) {
+    return <p className="text-sm text-muted-foreground">Not provided.</p>;
+  }
+
+  return (
+    <div
+      className={cn(
+        "prose prose-sm max-w-none text-foreground leading-relaxed",
+        className
+      )}
+      dangerouslySetInnerHTML={{ __html: renderFormattedHtml(value) }}
+    />
+  );
+};
 
 export const QuestionReviewGrid = ({
   questions: initialQuestions,
@@ -49,6 +137,9 @@ export const QuestionReviewGrid = ({
     }))
   );
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
+  const [editingQuestionIds, setEditingQuestionIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [savingQuestionIds, setSavingQuestionIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -154,11 +245,14 @@ export const QuestionReviewGrid = ({
 
     try {
       const formData = buildSingleFormData(question);
-      await questionService.store(formData);
+      const response = await questionService.store(formData) as {
+        isSuccess: boolean;
+        message: string | null;
+      } | null;
 
       toast({
         title: "Success!",
-        description: `Question ${displayNumber} saved successfully`,
+        description: response?.message || `Question ${displayNumber} saved successfully`,
       });
     } catch (error) {
       console.error("Error saving question:", error);
@@ -259,6 +353,24 @@ export const QuestionReviewGrid = ({
 
   const removeQuestion = (id: string) => {
     setQuestions((prev) => prev.filter((q) => q.id !== id));
+    setEditingQuestionIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleQuestionEdit = (id: string) => {
+    setEditingQuestionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+        setExpandedQuestion(id);
+      }
+      return next;
+    });
   };
 
   return (
@@ -301,14 +413,17 @@ export const QuestionReviewGrid = ({
 
         {/* Questions Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {questions.map((question, index) => (
-            <Card
-              key={question.id}
-              className={cn(
-                "p-4 space-y-4 transition-all",
-                expandedQuestion === question.id && "ring-2 ring-primary"
-              )}
-            >
+          {questions.map((question, index) => {
+            const isEditing = editingQuestionIds.has(question.id);
+
+            return (
+              <Card
+                key={question.id}
+                className={cn(
+                  "p-4 space-y-4 transition-all",
+                  expandedQuestion === question.id && "ring-2 ring-primary"
+                )}
+              >
               {/* Question Header */}
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 space-y-2">
@@ -336,6 +451,24 @@ export const QuestionReviewGrid = ({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant={isEditing ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => toggleQuestionEdit(question.id)}
+                    className="gap-2"
+                  >
+                    {isEditing ? (
+                      <>
+                        <Eye className="h-4 w-4" />
+                        Review
+                      </>
+                    ) : (
+                      <>
+                        <Pencil className="h-4 w-4" />
+                        Edit
+                      </>
+                    )}
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -373,107 +506,141 @@ export const QuestionReviewGrid = ({
               {/* Question Content */}
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Question Content</Label>
-                <Textarea
-                  value={question.content}
-                  onChange={(e) =>
-                    updateQuestion(question.id, { content: e.target.value })
-                  }
-                  className="min-h-[100px] resize-none"
-                  placeholder="Question text..."
-                />
+                {isEditing ? (
+                  <Textarea
+                    value={question.content}
+                    onChange={(e) =>
+                      updateQuestion(question.id, { content: e.target.value })
+                    }
+                    className="min-h-[100px] resize-none"
+                    placeholder="Question text..."
+                  />
+                ) : (
+                  <div className="rounded-md border border-border bg-muted/30 p-3">
+                    <FormattedText value={question.content} />
+                  </div>
+                )}
               </div>
 
               {/* Question Image */}
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Question Image (Optional)</Label>
-                <ImageUpload
-                  value={question.imageUrl}
-                  onChange={({ file, preview }) =>
-                    updateQuestion(question.id, {
-                      imageUrl: preview,
-                      imageFile: file,
-                    })
-                  }
-                  compact
-                />
-              </div>
+              {(isEditing || question.imageUrl) && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">
+                    Question Image (Optional)
+                  </Label>
+                  {isEditing ? (
+                    <ImageUpload
+                      value={question.imageUrl}
+                      onChange={({ file, preview }) =>
+                        updateQuestion(question.id, {
+                          imageUrl: preview,
+                          imageFile: file,
+                        })
+                      }
+                      compact
+                    />
+                  ) : (
+                    <img
+                      src={question.imageUrl}
+                      alt={`Question ${getDisplayNumber(question, index)}`}
+                      className="max-h-48 w-full rounded-md border border-border bg-muted object-contain"
+                    />
+                  )}
+                </div>
+              )}
 
               {/* Section & Weight */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Section (Optional)</Label>
-                  <Textarea
-                    value={question.section || ""}
-                    onChange={(e) =>
-                      updateQuestion(question.id, { section: e.target.value })
-                    }
-                    className="min-h-[80px] resize-none"
-                    placeholder="e.g., Algebra"
-                  />
+              {isEditing && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">
+                      Section (Optional)
+                    </Label>
+                    <Textarea
+                      value={question.section || ""}
+                      onChange={(e) =>
+                        updateQuestion(question.id, { section: e.target.value })
+                      }
+                      className="min-h-[80px] resize-none"
+                      placeholder="e.g., Algebra"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Weight</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={question.weight}
+                      onChange={(e) =>
+                        updateQuestion(question.id, {
+                          weight: parseInt(e.target.value) || 1,
+                        })
+                      }
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Weight</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={question.weight}
-                    onChange={(e) =>
-                      updateQuestion(question.id, {
-                        weight: parseInt(e.target.value) || 1,
-                      })
-                    }
-                  />
-                </div>
-              </div>
+              )}
 
               {/* Topic, Subtopic & Source */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Topic (Optional)</Label>
-                  <TopicSelect
-                    value={question.topic || ""}
-                    topics={topics}
-                    disabled={isTopicsLoading}
-                    placeholder={isTopicsLoading ? "Loading topics..." : "Select topic"}
-                    onChange={(value) =>
-                      updateQuestion(question.id, { topic: value })
-                    }
-                  />
+              {isEditing && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">
+                      Topic (Optional)
+                    </Label>
+                    <TopicSelect
+                      value={question.topic || ""}
+                      topics={topics}
+                      disabled={isTopicsLoading}
+                      placeholder={
+                        isTopicsLoading ? "Loading topics..." : "Select topic"
+                      }
+                      onChange={(value) =>
+                        updateQuestion(question.id, { topic: value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">
+                      Subtopic (Optional)
+                    </Label>
+                    <Input
+                      value={question.subtopic || ""}
+                      onChange={(e) =>
+                        updateQuestion(question.id, { subtopic: e.target.value })
+                      }
+                      placeholder="e.g., Factoring"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">
+                      Source (Optional)
+                    </Label>
+                    <Input
+                      value={question.source || ""}
+                      onChange={(e) =>
+                        updateQuestion(question.id, { source: e.target.value })
+                      }
+                      placeholder="e.g., Cambridge or Teacher's Note"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Subtopic (Optional)</Label>
-                  <Input
-                    value={question.subtopic || ""}
-                    onChange={(e) =>
-                      updateQuestion(question.id, { subtopic: e.target.value })
-                    }
-                    placeholder="e.g., Factoring"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Source (Optional)</Label>
-                  <Input
-                    value={question.source || ""}
-                    onChange={(e) =>
-                      updateQuestion(question.id, { source: e.target.value })
-                    }
-                    placeholder="e.g., Cambridge or Teacher's Note"
-                  />
-                </div>
-              </div>
+              )}
 
               {/* Options */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-semibold">Options</Label>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => addOption(question.id)}
-                    disabled={question.options.length >= 8}
-                  >
-                    Add Option
-                  </Button>
+                  {isEditing && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addOption(question.id)}
+                      disabled={question.options.length >= 8}
+                    >
+                      Add Option
+                    </Button>
+                  )}
                 </div>
                 <div className="space-y-2">
                   {question.options.map((option, optIndex) => (
@@ -486,18 +653,26 @@ export const QuestionReviewGrid = ({
                           : "border-border"
                       )}
                     >
-                      <RadioGroup
-                        value={option.isCorrect ? option.label : ""}
-                        onValueChange={() =>
-                          setCorrectAnswer(question.id, option.label)
-                        }
-                      >
-                        <RadioGroupItem
-                          value={option.label}
-                          id={`${question.id}-${option.label}`}
-                          className="mt-1"
-                        />
-                      </RadioGroup>
+                      {isEditing ? (
+                        <RadioGroup
+                          value={option.isCorrect ? option.label : ""}
+                          onValueChange={() =>
+                            setCorrectAnswer(question.id, option.label)
+                          }
+                        >
+                          <RadioGroupItem
+                            value={option.label}
+                            id={`${question.id}-${option.label}`}
+                            className="mt-1"
+                          />
+                        </RadioGroup>
+                      ) : (
+                        <div className="mt-1 h-4 w-4 flex-shrink-0">
+                          {option.isCorrect && (
+                            <CheckCircle2 className="h-4 w-4 text-success" />
+                          )}
+                        </div>
+                      )}
                       <div className="flex-1 space-y-1">
                         <div className="flex items-center gap-2">
                           <Badge
@@ -506,24 +681,35 @@ export const QuestionReviewGrid = ({
                           >
                             {option.label}
                           </Badge>
-                          <Input
-                            value={option.content}
-                            onChange={(e) =>
-                              updateOption(question.id, optIndex, {
-                                content: e.target.value,
-                              })
-                            }
-                            placeholder={`Option ${option.label}...`}
-                            className="flex-1"
-                          />
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeOption(question.id, optIndex)}
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
+                          {isEditing ? (
+                            <>
+                              <Input
+                                value={option.content}
+                                onChange={(e) =>
+                                  updateOption(question.id, optIndex, {
+                                    content: e.target.value,
+                                  })
+                                }
+                                placeholder={`Option ${option.label}...`}
+                                className="flex-1"
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() =>
+                                  removeOption(question.id, optIndex)
+                                }
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </>
+                          ) : (
+                            <FormattedText
+                              value={option.content}
+                              className="flex-1"
+                            />
+                          )}
                         </div>
                       </div>
                     </div>
@@ -535,18 +721,27 @@ export const QuestionReviewGrid = ({
               {question.explanation && (
                 <div className="space-y-2">
                   <Label className="text-sm font-semibold">Solution</Label>
-                  <Textarea
-                    value={question.explanation}
-                    onChange={(e) =>
-                      updateQuestion(question.id, { explanation: e.target.value })
-                    }
-                    className="min-h-[80px] resize-none"
-                    placeholder="Solution explanation..."
-                  />
+                  {isEditing ? (
+                    <Textarea
+                      value={question.explanation}
+                      onChange={(e) =>
+                        updateQuestion(question.id, {
+                          explanation: e.target.value,
+                        })
+                      }
+                      className="min-h-[80px] resize-none"
+                      placeholder="Solution explanation..."
+                    />
+                  ) : (
+                    <div className="rounded-md border border-border bg-muted/30 p-3">
+                      <FormattedText value={question.explanation} />
+                    </div>
+                  )}
                 </div>
               )}
             </Card>
-          ))}
+            );
+          })}
         </div>
 
         {questions.length === 0 && (
@@ -558,4 +753,3 @@ export const QuestionReviewGrid = ({
     </div>
   );
 };
-

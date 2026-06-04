@@ -73,8 +73,8 @@ const buildBulkFormData = (questions: EditableQuestion[]) => {
       `questions[${qIndex}].solution`,
       q.explanation?.trim() || ""
     );
-    formData.append(`questions[${qIndex}].examType`, q.examType);
-    formData.append(`questions[${qIndex}].subject`, q.subject);
+    formData.append(`questions[${qIndex}].examType`, q.examType.toLowerCase());
+    formData.append(`questions[${qIndex}].subject`, q.subject.toLowerCase());
     formData.append(`questions[${qIndex}].examYear`, q.examYear);
 
     const questionImageFile = q.imageFile || dataUrlToFile(q.imageUrl);
@@ -136,11 +136,14 @@ export const useBulkSaveQuestions = ({
 
     try {
       const formData = buildBulkFormData(questions);
-      await questionService.storeBulk(formData);
+      const response = await questionService.storeBulk(formData) as {
+        isSuccess: boolean;
+        message: string | null;
+      } | null;
 
       toast({
         title: "Success!",
-        description: `Successfully saved ${questions.length} question(s)`,
+        description: response?.message || `Successfully saved ${questions.length} question(s)`,
       });
 
       onSuccess();
