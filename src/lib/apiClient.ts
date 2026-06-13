@@ -1,6 +1,7 @@
 type ApiErrorBody = {
   message?: string;
   error?: { message?: string };
+  errors?: Record<string, string[]>;
 };
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -17,11 +18,26 @@ const buildUrl = (path: string) => {
 const parseErrorMessage = async (response: Response) => {
   try {
     const data = (await response.clone().json()) as ApiErrorBody;
-    return (
-      data?.message ||
-      data?.error?.message ||
-      `Server error: ${response.status} ${response.statusText}`
-    );
+
+    if (data?.message) {
+      return data.message;
+    }
+
+    if (data?.error?.message) {
+      return data.error.message;
+    }
+
+    if (data?.errors) {
+      const validationMessages = Object.values(data.errors)
+        .flat()
+        .filter(Boolean);
+
+      if (validationMessages.length > 0) {
+        return validationMessages.join(", ");
+      }
+    }
+
+    return `Server error: ${response.status} ${response.statusText}`;
   } catch {
     return `Server error: ${response.status} ${response.statusText}`;
   }
